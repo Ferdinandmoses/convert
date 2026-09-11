@@ -122,7 +122,7 @@ export async function syncWorkflowFileToRepo(
           'X-GitHub-Api-Version': '2022-11-28',
         },
         body: JSON.stringify({
-          message: 'ci: update Android build workflow with custom app icon and styling',
+          message: 'ci: fix workflow YAML syntax and optimize Android APK build',
           content: base64Content,
           branch,
           ...(sha ? { sha } : {}),
