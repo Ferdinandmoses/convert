@@ -12,24 +12,24 @@ export function generateWorkflowYml(config: AppConfig, iconBase64?: string): str
 
   // Permission tags
   const permissionsList = [
-    '    <uses-permission android:name="android.permission.INTERNET" />',
-    '    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />',
+    '              <uses-permission android:name="android.permission.INTERNET" />',
+    '              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />',
   ];
   if (config.permissions?.camera) {
-    permissionsList.push('    <uses-permission android:name="android.permission.CAMERA" />');
+    permissionsList.push('              <uses-permission android:name="android.permission.CAMERA" />');
   }
   if (config.permissions?.location) {
-    permissionsList.push('    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />');
-    permissionsList.push('    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />');
+    permissionsList.push('              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />');
+    permissionsList.push('              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />');
   }
   if (config.permissions?.storage) {
-    permissionsList.push('    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />');
+    permissionsList.push('              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />');
   }
   if (config.permissions?.microphone) {
-    permissionsList.push('    <uses-permission android:name="android.permission.RECORD_AUDIO" />');
+    permissionsList.push('              <uses-permission android:name="android.permission.RECORD_AUDIO" />');
   }
   if (config.permissions?.notifications || config.firebase?.enabled) {
-    permissionsList.push('    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />');
+    permissionsList.push('              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />');
   }
 
   // Splash Screen view block for activity_main.xml
@@ -87,6 +87,10 @@ export function generateWorkflowYml(config: AppConfig, iconBase64?: string): str
   ` : '';
 
   // Icon writing script (if base64 provided)
+  const indentedIconBase64 = iconBase64
+    ? (iconBase64.match(/.{1,76}/g)?.map((chunk) => `          ${chunk}`).join('\n') || '')
+    : '';
+
   const iconScript = iconBase64 ? `
           # Write Custom Icon from Web2App
           mkdir -p android/app/src/main/res/drawable
@@ -96,9 +100,9 @@ export function generateWorkflowYml(config: AppConfig, iconBase64?: string): str
           mkdir -p android/app/src/main/res/mipmap-xxhdpi
           mkdir -p android/app/src/main/res/mipmap-xxxhdpi
 
-          cat << 'EOF' | base64 -d > android/app/src/main/res/drawable/ic_launcher.png
-${iconBase64}
-EOF
+          cat << 'EOFB64' | tr -d ' \\n\\r' | base64 -d > android/app/src/main/res/drawable/ic_launcher.png
+${indentedIconBase64}
+          EOFB64
           cp android/app/src/main/res/drawable/ic_launcher.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
           cp android/app/src/main/res/drawable/ic_launcher.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           cp android/app/src/main/res/drawable/ic_launcher.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png

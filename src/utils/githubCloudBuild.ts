@@ -195,12 +195,12 @@ export async function triggerCloudBuild(
   try {
     let response = await sendDispatch();
 
-    // If 404 (workflow file not found on GitHub yet), try to sync it once and dispatch again
-    if (response.status === 404) {
+    // If 404 (workflow file missing) OR 422 (workflow does not have 'workflow_dispatch' trigger, caused by earlier YAML syntax error)
+    if (response.status === 404 || response.status === 422) {
       const syncRes = await syncWorkflowFileToRepo(config, customWorkflowYml);
       if (syncRes.success) {
-        // Wait 1.5 seconds for GitHub to index the newly created workflow
-        await new Promise((r) => setTimeout(r, 1500));
+        // Wait 3 seconds for GitHub Actions to re-parse the newly pushed valid workflow
+        await new Promise((r) => setTimeout(r, 3000));
         response = await sendDispatch();
       }
     }
@@ -224,6 +224,8 @@ export async function triggerCloudBuild(
     let errMsg = data.message || `Gagal memulai kompilasi (HTTP ${response.status})`;
     if (errMsg.toLowerCase().includes('admin rights') || response.status === 403) {
       errMsg = `Must have admin rights to Repository (${config.owner}/${config.repo}). Token GitHub Anda tidak memiliki hak akses/admin pada repositori ini atau belum dicentang izin 'workflow'.`;
+    } else if (errMsg.toLowerCase().includes('workflow_dispatch') || response.status === 422) {
+      errMsg = `GitHub Actions baru saja menerima alur kerja yang diperbaiki dan sedang memproses validasi. Silakan tunggu sekitar 10-15 detik lalu klik tombol 'Mulai Kompilasi Cloud APK Asli' lagi, atau buka langsung tautan GitHub Actions di bawah.`;
     }
     return {
       success: false,

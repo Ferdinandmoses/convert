@@ -449,6 +449,38 @@ export const CloudBuildPanel: React.FC<CloudBuildPanelProps> = ({ config }) => {
               </div>
             </div>
           )}
+
+          {(errorMessage.toLowerCase().includes('workflow_dispatch') || errorMessage.toLowerCase().includes('alur kerja') || errorMessage.toLowerCase().includes('validasi')) && (
+            <div className="pt-2 border-t border-red-500/30 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={handleSyncWorkflow}
+                disabled={isSyncingWorkflow || !ghConfig.token.trim()}
+                className="flex-1 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {isSyncingWorkflow ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyinkronkan Berkas...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>Perbarui & Sinkronkan Alur Kerja ke GitHub</span>
+                  </>
+                )}
+              </button>
+              <a
+                href={directWorkflowUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors border border-slate-700"
+              >
+                <span>Buka GitHub Actions</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          )}
         </div>
       )}
 
