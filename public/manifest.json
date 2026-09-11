@@ -1,0 +1,19 @@
+{
+  "name": "Web2App Studio",
+  "short_name": "Web2App",
+  "description": "Konversi URL Web ke Aplikasi Android APK & AAB",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

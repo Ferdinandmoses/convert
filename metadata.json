@@ -1,0 +1,6 @@
+{
+  "name": "Web2App Studio - Konversi URL ke APK & AAB",
+  "description": "Konversi URL web menjadi aplikasi Android otomatis dengan file APK dan AAB siap unggah ke Google Play Store serta terintegrasi push notifikasi Firebase (FCM).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
