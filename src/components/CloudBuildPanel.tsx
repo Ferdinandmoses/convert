@@ -246,9 +246,20 @@ export const CloudBuildPanel: React.FC<CloudBuildPanelProps> = ({ config }) => {
           <div className="pt-2 border-t border-slate-800 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  Repositori GitHub (Owner / Repo):
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-400">
+                    Repositori GitHub (Owner / Repo):
+                  </label>
+                  {(`${ghConfig.owner}/${ghConfig.repo}` !== 'Ferdinandmoses/convert') && (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveConfig({ owner: 'Ferdinandmoses', repo: 'convert' })}
+                      className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold underline cursor-pointer"
+                    >
+                      Reset ke Ferdinandmoses/convert
+                    </button>
+                  )}
+                </div>
                 <div className="flex items-center gap-1">
                   <input
                     type="text"
@@ -375,16 +386,69 @@ export const CloudBuildPanel: React.FC<CloudBuildPanelProps> = ({ config }) => {
         </div>
       )}
 
-      {/* Error Message */}
+      {/* Error Message & Troubleshooting */}
       {errorMessage && (
-        <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl flex items-start gap-2.5 text-xs text-red-200">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <span className="font-semibold">{errorMessage}</span>
-            <p className="text-[11px] text-slate-300">
-              Alternatif cepat: Anda juga bisa langsung membuka menu kompilasi manual di GitHub di bawah ini.
-            </p>
+        <div className="p-4 bg-red-950/50 border border-red-500/50 rounded-xl space-y-3 text-xs text-red-200 shadow-lg">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold text-white text-sm">Gagal Mengakses Repositori GitHub</span>
+              <p className="text-red-200 text-xs leading-relaxed">{errorMessage}</p>
+            </div>
           </div>
+
+          {errorMessage.toLowerCase().includes('admin rights') && (
+            <div className="pt-2 border-t border-red-500/30 space-y-2.5">
+              <div className="text-slate-200 text-xs font-semibold">
+                Pilih salah satu solusi di bawah ini untuk mengatasinya:
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {/* Option 1: Fix repo name */}
+                {(`${ghConfig.owner}/${ghConfig.repo}` !== 'Ferdinandmoses/convert') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveConfig({ owner: 'Ferdinandmoses', repo: 'convert' });
+                      setErrorMessage(null);
+                    }}
+                    className="p-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex flex-col items-center justify-center text-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>1. Gunakan Repo Anda:</span>
+                    <span className="font-mono text-[11px] bg-blue-700/60 px-1.5 py-0.5 rounded">Ferdinandmoses/convert</span>
+                  </button>
+                )}
+
+                {/* Option 2: Generate token with proper scopes */}
+                <a
+                  href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Web2App%20Studio%20Cloud%20Compiler"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs flex flex-col items-center justify-center text-center gap-1 transition-colors border border-slate-700"
+                >
+                  <span className="flex items-center gap-1">
+                    <span>2. Buat Token Baru</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Otomatis centang 'repo' & 'workflow'</span>
+                </a>
+
+                {/* Option 3: Direct 1-Click Run in GitHub Actions without token */}
+                <a
+                  href={directWorkflowUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs flex flex-col items-center justify-center text-center gap-1 transition-colors"
+                >
+                  <span className="flex items-center gap-1">
+                    <span>3. Jalankan di GitHub</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </span>
+                  <span className="text-[10px] text-emerald-200 font-normal">Tanpa perlu token API</span>
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

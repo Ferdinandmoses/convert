@@ -35,14 +35,22 @@ export function getSavedGitHubConfig(): GitHubConfig {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     try {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Auto-migrate legacy placeholder repository if still pointing to old repo
+      if (parsed.owner === 'perdinanmoses34-hub' || !parsed.owner) {
+        parsed.owner = 'Ferdinandmoses';
+      }
+      if (parsed.repo === 'tn.timbu' || !parsed.repo) {
+        parsed.repo = 'convert';
+      }
+      return parsed;
     } catch {
       // ignore
     }
   }
   return {
-    owner: 'perdinanmoses34-hub',
-    repo: 'tn.timbu',
+    owner: 'Ferdinandmoses',
+    repo: 'convert',
     token: '',
     branch: 'main',
   };
@@ -116,9 +124,13 @@ export async function syncWorkflowFileToRepo(
     }
 
     const errData = await putRes.json().catch(() => ({}));
+    let errMsg = errData.message || `Gagal menyinkronkan berkas ke GitHub (HTTP ${putRes.status})`;
+    if (errMsg.toLowerCase().includes('admin rights') || putRes.status === 403) {
+      errMsg = `Must have admin rights to Repository (${config.owner}/${config.repo}). Pastikan nama repositori sesuai dengan akun Anda dan Token memiliki izin 'repo' serta 'workflow'.`;
+    }
     return {
       success: false,
-      message: errData.message || `Gagal menyinkronkan berkas ke GitHub (HTTP ${putRes.status})`,
+      message: errMsg,
     };
   } catch (err: any) {
     return {
@@ -136,9 +148,13 @@ export async function triggerCloudBuild(
   inputs: { target_url: string; app_name: string; package_name: string },
   customWorkflowYml?: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Ensure workflow file is up to date on GitHub with custom icon & styling before dispatching
+  // Try syncing custom workflow if possible, but continue even if sync is restricted
   if (config.token.trim()) {
-    await syncWorkflowFileToRepo(config, customWorkflowYml).catch(() => {});
+    try {
+      await syncWorkflowFileToRepo(config, customWorkflowYml);
+    } catch {
+      // Continue to dispatch if workflow file already exists in repo
+    }
   }
 
   const url = `https://api.github.com/repos/${config.owner}/${config.repo}/actions/workflows/build-apk.yml/dispatches`;
@@ -168,14 +184,18 @@ export async function triggerCloudBuild(
     if (response.status === 404) {
       return {
         success: false,
-        error: `Repositori "${config.owner}/${config.repo}" atau alur kerja "build-apk.yml" tidak ditemukan. Pastikan nama repositori dan token sudah benar (memiliki izin "repo" dan "workflow").`,
+        error: `Repositori "${config.owner}/${config.repo}" atau alur kerja "build-apk.yml" tidak ditemukan. Pastikan nama repositori (${config.owner}/${config.repo}) dan token sudah benar (memiliki izin "repo" dan "workflow").`,
       };
     }
 
     const data = await response.json().catch(() => ({}));
+    let errMsg = data.message || `Gagal memulai kompilasi (HTTP ${response.status})`;
+    if (errMsg.toLowerCase().includes('admin rights') || response.status === 403) {
+      errMsg = `Must have admin rights to Repository (${config.owner}/${config.repo}). Token GitHub Anda tidak memiliki hak akses/admin pada repositori ini atau belum dicentang izin 'workflow'.`;
+    }
     return {
       success: false,
-      error: data.message || `Gagal memulai kompilasi (HTTP ${response.status})`,
+      error: errMsg,
     };
   } catch (err: any) {
     return {
