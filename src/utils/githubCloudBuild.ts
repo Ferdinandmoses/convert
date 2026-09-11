@@ -76,27 +76,45 @@ export async function syncWorkflowFileToRepo(
   const path = '.github/workflows/build-apk.yml';
   const branch = config.branch || 'main';
 
-  // Helper to fetch the latest SHA fresh from GitHub (with cache busting)
+  // Helper to fetch the latest SHA fresh from GitHub using standard CORS-allowed headers
   const fetchLatestSha = async (): Promise<string | undefined> => {
+    // Strategy 1: contents API
     try {
-      const getUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${branch}&_ts=${Date.now()}`;
+      const getUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${encodeURIComponent(branch)}`;
       const res = await fetch(getUrl, {
-        cache: 'no-store',
         headers: {
           Accept: 'application/vnd.github+json',
           Authorization: `Bearer ${config.token.trim()}`,
           'X-GitHub-Api-Version': '2022-11-28',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          Pragma: 'no-cache',
         },
       });
       if (res.ok) {
         const data = await res.json();
-        return data.sha;
+        if (data.sha) return data.sha;
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('Strategy 1 fetch SHA warning:', err);
     }
+
+    // Strategy 2: Git Trees API fallback
+    try {
+      const treeUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
+      const res = await fetch(treeUrl, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${config.token.trim()}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const item = (data.tree || []).find((t: any) => t.path === path);
+        if (item?.sha) return item.sha;
+      }
+    } catch (err) {
+      console.warn('Strategy 2 fetch SHA warning:', err);
+    }
+
     return undefined;
   };
 
@@ -132,8 +150,8 @@ export async function syncWorkflowFileToRepo(
 
     let putRes = await sendPut(existingSha);
 
-    // If 409 Conflict (e.g. SHA mismatch), re-fetch fresh SHA and retry once
-    if (putRes.status === 409) {
+    // If 409 Conflict (e.g. SHA mismatch) or 422 (SHA wasn't supplied), re-fetch fresh SHA and retry
+    if (putRes.status === 409 || putRes.status === 422) {
       existingSha = await fetchLatestSha();
       if (existingSha) {
         putRes = await sendPut(existingSha);
@@ -149,7 +167,9 @@ export async function syncWorkflowFileToRepo(
     if (errMsg.toLowerCase().includes('admin rights') || putRes.status === 403) {
       errMsg = `Must have admin rights to Repository (${config.owner}/${config.repo}). Pastikan nama repositori sesuai dengan akun Anda dan Token memiliki izin 'repo' serta 'workflow'.`;
     } else if (errMsg.includes('does not match') || putRes.status === 409) {
-      errMsg = `Konflik versi: Berkas alur kerja di GitHub baru saja diperbarui. Alur kerja sudah tersedia di repositori Anda dan siap dijalankan.`;
+      errMsg = `Konflik versi: Berkas alur kerja di GitHub baru saja diperbarui. Silakan coba klik tombol kembali.`;
+    } else if (errMsg.includes('"sha" wasn\'t supplied') || errMsg.includes('sha')) {
+      errMsg = `Gagal mengidentifikasi SHA berkas di GitHub. Pastikan token memiliki izin 'repo' (Full control of private/public repositories) agar dapat membaca metadata berkas.`;
     }
     return {
       success: false,
