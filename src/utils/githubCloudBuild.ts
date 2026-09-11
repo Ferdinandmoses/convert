@@ -75,24 +75,33 @@ export async function syncWorkflowFileToRepo(
 
   const path = '.github/workflows/build-apk.yml';
   const branch = config.branch || 'main';
-  const getUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${branch}`;
 
-  let existingSha: string | undefined;
+  // Helper to fetch the latest SHA fresh from GitHub (with cache busting)
+  const fetchLatestSha = async (): Promise<string | undefined> => {
+    try {
+      const getUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}?ref=${branch}&_ts=${Date.now()}`;
+      const res = await fetch(getUrl, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${config.token.trim()}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.sha;
+      }
+    } catch {
+      // ignore
+    }
+    return undefined;
+  };
 
   try {
-    const getRes = await fetch(getUrl, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${config.token.trim()}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-
-    if (getRes.ok) {
-      const data = await getRes.json();
-      existingSha = data.sha;
-    }
-
+    let existingSha = await fetchLatestSha();
     const workflowContentToSync = customWorkflowYml || LATEST_WORKFLOW_YML;
 
     const putUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}`;
@@ -104,20 +113,32 @@ export async function syncWorkflowFileToRepo(
     }
     const base64Content = btoa(binary);
 
-    const putRes = await fetch(putUrl, {
-      method: 'PUT',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${config.token.trim()}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify({
-        message: 'ci: update Android build workflow with custom app icon and styling',
-        content: base64Content,
-        branch,
-        ...(existingSha ? { sha: existingSha } : {}),
-      }),
-    });
+    const sendPut = async (sha?: string) => {
+      return fetch(putUrl, {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${config.token.trim()}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          message: 'ci: update Android build workflow with custom app icon and styling',
+          content: base64Content,
+          branch,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+    };
+
+    let putRes = await sendPut(existingSha);
+
+    // If 409 Conflict (e.g. SHA mismatch), re-fetch fresh SHA and retry once
+    if (putRes.status === 409) {
+      existingSha = await fetchLatestSha();
+      if (existingSha) {
+        putRes = await sendPut(existingSha);
+      }
+    }
 
     if (putRes.ok) {
       return { success: true, message: 'Alur kerja build-apk.yml berhasil disinkronkan ke repositori GitHub.' };
@@ -127,6 +148,8 @@ export async function syncWorkflowFileToRepo(
     let errMsg = errData.message || `Gagal menyinkronkan berkas ke GitHub (HTTP ${putRes.status})`;
     if (errMsg.toLowerCase().includes('admin rights') || putRes.status === 403) {
       errMsg = `Must have admin rights to Repository (${config.owner}/${config.repo}). Pastikan nama repositori sesuai dengan akun Anda dan Token memiliki izin 'repo' serta 'workflow'.`;
+    } else if (errMsg.includes('does not match') || putRes.status === 409) {
+      errMsg = `Konflik versi: Berkas alur kerja di GitHub baru saja diperbarui. Alur kerja sudah tersedia di repositori Anda dan siap dijalankan.`;
     }
     return {
       success: false,
@@ -145,22 +168,13 @@ export async function syncWorkflowFileToRepo(
  */
 export async function triggerCloudBuild(
   config: GitHubConfig,
-  inputs: { target_url: string; app_name: string; package_name: string },
+  inputs: { target_url: string; app_name: string; package_name?: string },
   customWorkflowYml?: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Try syncing custom workflow if possible, but continue even if sync is restricted
-  if (config.token.trim()) {
-    try {
-      await syncWorkflowFileToRepo(config, customWorkflowYml);
-    } catch {
-      // Continue to dispatch if workflow file already exists in repo
-    }
-  }
-
   const url = `https://api.github.com/repos/${config.owner}/${config.repo}/actions/workflows/build-apk.yml/dispatches`;
 
-  try {
-    const response = await fetch(url, {
+  const sendDispatch = async () => {
+    return fetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.github+json',
@@ -169,9 +183,27 @@ export async function triggerCloudBuild(
       },
       body: JSON.stringify({
         ref: config.branch || 'main',
-        inputs,
+        inputs: {
+          target_url: inputs.target_url,
+          app_name: inputs.app_name,
+          ...(inputs.package_name ? { package_name: inputs.package_name } : {}),
+        },
       }),
     });
+  };
+
+  try {
+    let response = await sendDispatch();
+
+    // If 404 (workflow file not found on GitHub yet), try to sync it once and dispatch again
+    if (response.status === 404) {
+      const syncRes = await syncWorkflowFileToRepo(config, customWorkflowYml);
+      if (syncRes.success) {
+        // Wait 1.5 seconds for GitHub to index the newly created workflow
+        await new Promise((r) => setTimeout(r, 1500));
+        response = await sendDispatch();
+      }
+    }
 
     if (response.status === 204) {
       return { success: true };
@@ -184,7 +216,7 @@ export async function triggerCloudBuild(
     if (response.status === 404) {
       return {
         success: false,
-        error: `Repositori "${config.owner}/${config.repo}" atau alur kerja "build-apk.yml" tidak ditemukan. Pastikan nama repositori (${config.owner}/${config.repo}) dan token sudah benar (memiliki izin "repo" dan "workflow").`,
+        error: `Repositori "${config.owner}/${config.repo}" atau alur kerja "build-apk.yml" tidak ditemukan di branch ${config.branch || 'main'}. Pastikan repositori sudah di-push ke GitHub.`,
       };
     }
 
