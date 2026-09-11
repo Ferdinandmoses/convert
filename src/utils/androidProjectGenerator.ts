@@ -292,6 +292,14 @@ class MainActivity : AppCompatActivity() {
             swipeRefreshLayout.setOnRefreshListener {
                 webView.reload()
             }
+            swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
+                webView.canScrollVertically(-1) || webView.scrollY > 0
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                webView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                    swipeRefreshLayout.isEnabled = enabled && (scrollY == 0 && !webView.canScrollVertically(-1))
+                }
+            }
         }
     }
 

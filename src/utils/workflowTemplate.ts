@@ -351,24 +351,19 @@ jobs:
                   android:layout_width="match_parent"
                   android:layout_height="match_parent">
 
-                  <FrameLayout
+                  <WebView
+                      android:id="@+id/webView"
                       android:layout_width="match_parent"
-                      android:layout_height="match_parent">
-
-                      <WebView
-                          android:id="@+id/webView"
-                          android:layout_width="match_parent"
-                          android:layout_height="match_parent" />
-
-                      <ProgressBar
-                          android:id="@+id/progressBar"
-                          style="?android:attr/progressBarStyleHorizontal"
-                          android:layout_width="match_parent"
-                          android:layout_height="4dp"
-                          android:indeterminate="false"
-                          android:max="100" />
-                  </FrameLayout>
+                      android:layout_height="match_parent" />
               </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+              <ProgressBar
+                  android:id="@+id/progressBar"
+                  style="?android:attr/progressBarStyleHorizontal"
+                  android:layout_width="match_parent"
+                  android:layout_height="4dp"
+                  android:indeterminate="false"
+                  android:max="100" />
               ${splashLayoutXml}
           </FrameLayout>
           EOF
@@ -524,6 +519,15 @@ jobs:
                   if (pullRefreshEnabled) {
                       swipeRefresh.setOnRefreshListener {
                           webView.reload()
+                      }
+                      // Hanya izinkan refresh saat halaman benar-benar di puncak (scrollY == 0)
+                      swipeRefresh.setOnChildScrollUpCallback { _, _ ->
+                          webView.canScrollVertically(-1) || webView.scrollY > 0
+                      }
+                      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                          webView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                              swipeRefresh.isEnabled = pullRefreshEnabled && (scrollY == 0 && !webView.canScrollVertically(-1))
+                          }
                       }
                   }
 
